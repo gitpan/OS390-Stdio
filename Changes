@@ -1,5 +1,23 @@
 ##################################################################
 
+Special notes for release 0.006:
+--------------------------------
+The svc99() routine is now functional.
+An smf_record() routine is now available yet will be
+untested by test.pl owing to SMF deployment differences.  See
+the smf_test enclosed program for a way to test smf_record()
+before running `make install`.
+
+The stdio_cookbook.pod document has been expanded.
+
+You now have the option of passing data set names (e.g. partial
+names) to the get_dcb() and getname() routines in addition to still
+being able to pass mvsopen() file handles.
+
+All 161 tests ought to pass for you.
+
+##################################################################
+
 Special notes for release 0.005:
 --------------------------------
 The dynalloc() routine is now functional.
@@ -11,7 +29,7 @@ can now list aliases or aliases and non alias members
 depending on the value of an extra optional argument.
 
 * A pds_mem() test has been folded into test.pl, along with a
-  dynalloc() and a dynfree() test.  All 76 test ought to pass for
+  dynalloc() and a dynfree() test.  All 76 tests ought to pass for
   you.
 
 ##################################################################

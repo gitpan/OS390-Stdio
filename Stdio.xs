@@ -2,6 +2,8 @@
  * OS390::Stdio - MVS extensions to stdio routines 
  *
  * Author:   Peter Prymmer  pvhp@best.com
+ * Version:  0.006
+ * Revised:  25-May-2001
  * Version:  0.005
  * Revised:  17-May-2001
  * Version:  0.004
@@ -19,12 +21,15 @@
  * struct stat in <sys/stat.h>, hence OS390::Stdio::stat() cannot be 
  * implemented (use sysdsnr() instead).
  *
+ * both opendir() and __opendir2() seem to not like data sets.
+ *
  */
 
 /* 
  * We won't need to resort to this pragma if we set _EXT and compile with
  * c89 -DOEMVS -D_OE_SOCKETS -D_XOPEN_SOURCE_EXTENDED -D_ALL_SOURCE 
  * #pragma LANGLVL(EXTENDED)
+ *
  */
 
 #include "EXTERN.h"
@@ -33,6 +38,7 @@
 /* allow POSIX extensions (?) */
 #define _EXT 1
 #include <sys/file.h>
+/* O_* constants */
 #include <fcntl.h>
 #include <stdio.h>
 /* dynit.h for __dyn_t, dyninit(), dynalloc(), and dynfree() */
@@ -40,6 +46,8 @@
 /* for pds_mem() */
 #include <string.h>
 #include <stdlib.h>
+/* errno.h for __errno2() as used by smf_record */
+#include <errno.h>
 
 /*
  *  Note that FILENAME_MAX is defined in stdio.h to be
@@ -58,26 +66,30 @@
 #define MAXOSFILENAME 100
 
 /*
- * The vsam flocate() function has constants
- *
+ * OS390_STDIO_SVC99_TEXT_UNITS is the upper limit on the number 
+ * of text units to pass into svc99().
+ * OS390_STDIO_SVC99_MASK is involved with an "end of text units" flag.
  */
+#define OS390_STDIO_SVC99_TEXT_UNITS 25
+#define OS390_STDIO_SVC99_MASK 0x80000000
+
 static bool
 constant(name, pval)
 char *name;
 IV *pval;
 {
+
 /*
- *    if (strnNE(name, "O_", 2)) return FALSE;
- */
-/*
-    if ((strnNE(name, "O_", 2)) ||
-        (strnNE(name, "KEY_", 4)) ||
-        (strnNE(name, "RBA_", 4)))
-         return FALSE;
+ * This is where s/^_+// takes place.
+ *
+ *   while (*name == '_') { name++; }
  */
 
 /*
- * The KEY_* and RBA_* constants are used with
+ * The KEY_* and RBA_* constants are used with vsam type
+ * functions such as flocate() et alia.
+ * The definitions are "usually" found in /usr/include/stdio.h
+ *
  */
     if (strEQ(name, "KEY_FIRST"))
 #ifdef __KEY_FIRST
@@ -123,8 +135,10 @@ IV *pval;
 #endif
 
 /*
- *  The O_ constants are typically used with open() 
- *  [hence they may not be useful here]
+ * The O_ constants are typically used with open() rather than fopen()
+ * (hence they may not be too useful here).
+ * The definitions are "usually" found in /usr/include/fcntl.h
+ *
  */
     if (strEQ(name, "O_APPEND"))
 #ifdef O_APPEND
@@ -183,16 +197,452 @@ IV *pval;
 
 /*
  * __dyn_t constants for use with dyninit()/dynalloc()/dynfree()
+ * The definitions are "usually" found in /usr/include/dynit.h
+ *
  */
-    if (strEQ(name, "DISP_NEW"))
+    if (strEQ(name, "ALCUNIT_CYL"))    /* alcunit CYLINDER */
+#ifdef __CYL
+	{ *pval = __CYL; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "ALCUNIT_TRK"))    /* alcunit TRACK */
+#ifdef __TRK
+	{ *pval = __TRK; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "DISP_OLD"))       /* status STATUS=OLD */
+#ifdef __DISP_OLD
+	{ *pval = __DISP_OLD; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "DISP_MOD"))       /* status STATUS=MOD */
+#ifdef __DISP_MOD
+	{ *pval = __DISP_MOD; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "DISP_NEW"))       /* status STATUS=NEW */
 #ifdef __DISP_NEW
 	{ *pval = __DISP_NEW; return TRUE; }
 #else
 	return FALSE;
 #endif
+    if (strEQ(name, "DISP_SHR"))       /* status STATUS=SHR */
+#ifdef __DISP_SHR
+	{ *pval = __DISP_SHR; return TRUE; }
+#else
+	return FALSE;
+#endif
+/* normdisp, conddisp  */
+    if (strEQ(name, "DISP_UNCATLG"))   /* normdisp, conddisp  DISP=UNCATALOG */
+#ifdef __DISP_UNCATLG
+        { *pval = __DISP_UNCATLG; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DISP_CATLG"))     /* normdisp, conddisp  DISP=CATALOG */
+#ifdef __DISP_CATLG
+        { *pval = __DISP_CATLG; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DISP_DELETE"))    /* normdisp, conddisp  DISP=DELETE */
+#ifdef __DISP_DELETE
+        { *pval = __DISP_DELETE; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DISP_KEEP"))      /* normdisp, conddisp  DISP=KEEP */
+#ifdef __DISP_KEEP
+        { *pval = __DISP_KEEP; return TRUE; }
+#else
+        return FALSE;
+#endif
+/* dsorg  */
+    if (strEQ(name, "DSORG_unknown"))  /* dsorg  DSORG=UNKNOWN */
+#ifdef __DSORG_unknown
+        { *pval = __DSORG_unknown; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_VSAM"))     /* dsorg  DSORG=VSAM */
+#ifdef __DSORG_VSAM
+        { *pval = __DSORG_VSAM; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_GS"))       /* dsorg  DSORG=GS */
+#ifdef __DSORG_GS
+        { *pval = __DSORG_GS; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_PO"))       /* dsorg  DSORG=PO */
+#ifdef __DSORG_PO
+        { *pval = __DSORG_PO; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_POU"))      /* dsorg  DSORG=POU */
+#ifdef __DSORG_POU
+        { *pval = __DSORG_POU; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_DA"))       /* dsorg  DSORG=DA */
+#ifdef __DSORG_DA
+        { *pval = __DSORG_DA; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_DAU"))      /* dsorg  DSORG=DAU */
+#ifdef __DSORG_DAU
+        { *pval = __DSORG_DAU; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_PS"))       /* dsorg  DSORG=PS */
+#ifdef __DSORG_PS
+        { *pval = __DSORG_PS; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_PSU"))      /* dsorg  DSORG=PSU */
+#ifdef __DSORG_PSU
+        { *pval = __DSORG_PSU; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_IS"))       /* dsorg  DSORG=IS */
+#ifdef __DSORG_IS
+        { *pval = __DSORG_IS; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSORG_ISU"))      /* dsorg  DSORG=ISU */
+#ifdef __DSORG_ISU
+        { *pval = __DSORG_ISU; return TRUE; }
+#else
+        return FALSE;
+#endif
+/* recfm */
+    if (strEQ(name, "RECFM_M"))        /* recfm  M */
+#ifdef _M_
+	{ *pval = _M_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_A"))        /* recfm  A */
+#ifdef _A_
+	{ *pval = _A_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_S"))        /* recfm  S */
+#ifdef _S_
+	{ *pval = _S_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_B"))        /* recfm  B */
+#ifdef _B_
+	{ *pval = _B_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_D"))        /* recfm  D */
+#ifdef _D_
+	{ *pval = _D_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_V"))        /* recfm  V */
+#ifdef _V_
+	{ *pval = _V_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_F"))        /* recfm  FIXED */
+#ifdef _F_
+	{ *pval = _F_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_U"))        /* recfm  U */
+#ifdef _U_
+	{ *pval = _U_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_FB"))       /* recfm  FIXED BLOCK */
+#ifdef _FB_
+	{ *pval = _FB_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_VB"))       /* recfm  VB */
+#ifdef _VB_
+	{ *pval = _VB_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_FBS"))      /* recfm  FBS */
+#ifdef _FBS_
+	{ *pval = _FBS_; return TRUE; }
+#else
+	return FALSE;
+#endif
+    if (strEQ(name, "RECFM_VBS"))      /* recfm  VBS */
+#ifdef _VBS_
+	{ *pval = _VBS_; return TRUE; }
+#else
+	return FALSE;
+#endif
+/* miscflags  */
+    if (strEQ(name, "MISCFL_CLOSE"))   /* miscflags  CLOSE */
+#ifdef __CLOSE
+        { *pval = __CLOSE; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_RELEASE")) /* miscflags  RELEASE */
+#ifdef __RELEASE
+        { *pval = __RELEASE; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_PERM"))    /* miscflags  PERM */
+#ifdef __PERM
+        { *pval = __PERM; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_CONTIG"))  /* miscflags  CONTIG */
+#ifdef __CONTIG
+        { *pval = __CONTIG; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_ROUND"))   /* miscflags  ROUND */
+#ifdef __ROUND
+        { *pval = __ROUND; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_TERM"))    /* miscflags  TERM */
+#ifdef __TERM
+        { *pval = __TERM; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_DUMMY_DSN")) /* miscflags  DUMMY_DSN */
+#ifdef __DUMMY_DSN
+        { *pval = __DUMMY_DSN; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "MISCFL_HOLDQ"))   /* miscflags  HOLDQ */
+#ifdef __HOLDQ
+        { *pval = __HOLDQ; return TRUE; }
+#else
+        return FALSE;
+#endif
+/* vsam record organization  */
+    if (strEQ(name, "VSAM_KS"))        /* vsam record organization  KS */
+#ifdef __KS
+        { *pval = __KS; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "VSAM_ES"))        /* vsam record organization  ES */
+#ifdef __ES
+        { *pval = __ES; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "VSAM_RR"))        /* vsam record organization  RR */
+#ifdef __RR
+        { *pval = __RR; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "VSAM_LS"))        /* vsam record organization  LS */
+#ifdef __LS
+        { *pval = __LS; return TRUE; }
+#else
+        return FALSE;
+#endif
+/* pds type attributes  */
+    if (strEQ(name, "DSNT_HFS"))       /* pds type attributes  DSNT_HFS */
+#ifdef __DSNT_HFS
+        { *pval = __DSNT_HFS; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSNT_PIPE"))      /* pds type attributes  DSNT_PIPE */
+#ifdef __DSNT_PIPE
+        { *pval = __DSNT_PIPE; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSNT_PDS"))       /* pds type attributes  DSNT_PDS */
+#ifdef __DSNT_PDS
+        { *pval = __DSNT_PDS; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "DSNT_LIBRARY"))   /* pds type attributes  DSNT_LIBRARY */
+#ifdef __DSNT_LIBRARY
+        { *pval = __DSNT_LIBRARY; return TRUE; }
+#else
+        return FALSE;
+#endif
+/* path options */
+    if (strEQ(name, "PATH_OCREAT"))    /* path options  PATH_OCREAT */
+#ifdef __PATH_OCREAT
+        { *pval = __PATH_OCREAT; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_OEXCL"))     /* path options  PATH_OEXCL */
+#ifdef __PATH_OEXCL
+        { *pval = __PATH_OEXCL; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_ONOCTTY"))   /* path options  PATH_ONOCTTY */
+#ifdef __PATH_ONOCTTY
+        { *pval = __PATH_ONOCTTY; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_OTRUNC"))    /* path options  PATH_OTRUNC */
+#ifdef __PATH_OTRUNC
+        { *pval = __PATH_OTRUNC; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_OAPPEND"))   /* path options  PATH_OAPPEND */
+#ifdef __PATH_OAPPEND
+        { *pval = __PATH_OAPPEND; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_ONONBLOCK")) /* path options  PATH_ONONBLOCK */
+#ifdef __PATH_ONONBLOCK
+        { *pval = __PATH_ONONBLOCK; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_ORDWR"))     /* path options  PATH_ORDWR */
+#ifdef __PATH_ORDWR
+        { *pval = __PATH_ORDWR; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_ORDONLY"))   /* path options  PATH_ORDONLY */
+#ifdef __PATH_ORDONLY
+        { *pval = __PATH_ORDONLY; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_OWRONLY"))   /* path options  PATH_OWRONLY */
+#ifdef __PATH_OWRONLY
+        { *pval = __PATH_OWRONLY; return TRUE; }
+#else
+        return FALSE;
+#endif
+/* path attributes  */
+    if (strEQ(name, "PATH_SISUID"))    /* path attributes  PATH_SISUID */
+#ifdef __PATH_SISUID
+        { *pval = __PATH_SISUID; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SISGID"))    /* path attributes  PATH_SISGID */
+#ifdef __PATH_SISGID
+        { *pval = __PATH_SISGID; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIRUSR"))    /* path attributes  PATH_SIRUSR */
+#ifdef __PATH_SIRUSR
+        { *pval = __PATH_SIRUSR; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIWUSR"))    /* path attributes  PATH_SIWUSR */
+#ifdef __PATH_SIWUSR
+        { *pval = __PATH_SIWUSR; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIXUSR"))    /* path attributes  PATH_SIXUSR */
+#ifdef __PATH_SIXUSR
+        { *pval = __PATH_SIXUSR; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIRWXU"))    /* path attributes  PATH_SIRWXU */
+#ifdef __PATH_SIRWXU
+        { *pval = __PATH_SIRWXU; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIRGRP"))    /* path attributes  PATH_SIRGRP */
+#ifdef __PATH_SIRGRP
+        { *pval = __PATH_SIRGRP; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIWGRP"))    /* path attributes  PATH_SIWGRP */
+#ifdef __PATH_SIWGRP
+        { *pval = __PATH_SIWGRP; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIXGRP"))    /* path attributes  PATH_SIXGRP */
+#ifdef __PATH_SIXGRP
+        { *pval = __PATH_SIXGRP; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIRWXG"))    /* path attributes  PATH_SIRWXG */
+#ifdef __PATH_SIRWXG
+        { *pval = __PATH_SIRWXG; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIROTH"))    /* path attributes  PATH_SIROTH */
+#ifdef __PATH_SIROTH
+        { *pval = __PATH_SIROTH; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIWOTH"))    /* path attributes  PATH_SIWOTH */
+#ifdef __PATH_SIWOTH
+        { *pval = __PATH_SIWOTH; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIXOTH"))    /* path attributes  PATH_SIXOTH */
+#ifdef __PATH_SIXOTH
+        { *pval = __PATH_SIXOTH; return TRUE; }
+#else
+        return FALSE;
+#endif
+    if (strEQ(name, "PATH_SIRWXO"))    /* path attributes  PATH_SIRWXO */
+#ifdef __PATH_SIRWXO
+        { *pval = __PATH_SIRWXO; return TRUE; }
+#else
+        return FALSE;
+#endif
 
 /*
- * default fallthrough is FALSE
+ * default fall through is FALSE
  */
     return FALSE;
 }
@@ -242,15 +692,6 @@ h2dyn_t(struct __dyn_t *ip, HV *hip, int free_flag) {
     /*
      * __dyn_t structure Table 16, pp 218-220 C/C++ MVS Library Reference
      */
-    #ifdef _EXT
-    /*  s99rbx_t rbx; */
-      struct s99rbx_t * rbx;
-    #else
-      struct s99rbx_t * rbx;
-    #endif
-    /*
-     *
-     */
     HE * entry;
     I32 retlen;
     SV * hval;
@@ -260,11 +701,12 @@ h2dyn_t(struct __dyn_t *ip, HV *hip, int free_flag) {
     int got_any  = 0;
     int i = 0;
 
-    /* Iterate over hip setting *ip elements.  This is where s/^_+// takes place */
+    /* Iterate over hip setting *ip elements. */
         /* Strictly this "miscitems" is not char ** but char * instead. */
     (void)hv_iterinit(hip);
     while ((entry = hv_iternext(hip)))  {
         key = hv_iterkey(entry, &retlen); 
+        while (*key == '_') { key++; }   /* This is where s/^_+// takes place. */
         hval  = hv_iterval(hip, entry);
              if (strEQ(key,"ddname"))     { ip -> __ddname = SvPV(hval,len);       got_any++; got_free++; }
         else if (strEQ(key,"dsname"))     { ip -> __dsname = SvPV(hval,len);       got_any++; got_free++; }
@@ -308,7 +750,12 @@ h2dyn_t(struct __dyn_t *ip, HV *hip, int free_flag) {
         else if (strEQ(key,"pathndisp"))  { ip -> __pathndisp = (char)SvIV(hval);  got_any++; got_free++; }
         else if (strEQ(key,"pathcdisp"))  { ip -> __pathcdisp = (char)SvIV(hval);  got_any++; }
         i++;
-        /* if (!free_flag && got_any != i) {} */
+#ifdef WARN_DYN_T_KEY
+        if (!free_flag && got_any != i) { 
+            warn("h2dyn_t warning key '%s' not recognized.\n",key);
+            got_any = i; /* avoid war-ning for more than one unrecognized key */
+        }
+#endif    /* WARN_DYN_T_KEY */
     }
     return(i);
 }
@@ -399,26 +846,24 @@ NODE_PTR _pds_mem(const char *pds, int *member_number, int alias_flag) {
  */
     fp = fopen(pds,"rb");
     if (fp == NULL) {
-        fprintf(stderr,"fopen(%s,\"rb\") returned NULL.\n",pds);
+        warn("fopen(%s,\"rb\") returned NULL.\n",pds);
         return((NODE_PTR)(-1));
     }
     rc = fldata(fp, filename, &fileinfo);
     if (rc != 0) {
-        fprintf(stderr,"fldata() failed on %s.\n",pds);
+        warn("fldata() failed on %s.\n",pds);
         return((NODE_PTR)(-1));
     }
     if (fileinfo.__dsorgPO != 1) {
 #ifndef NO_WARN_IF_NOT_PDS
-        fprintf(stderr,
-                "Data set %s [filename %s] does not appear to be a PDS.\n",
+        warn("Data set %s [filename %s] does not appear to be a PDS.\n",
                 pds,filename);
 #endif
         return((NODE_PTR)(-1));
     }
     if (fileinfo.__dsorgPDSdir != 1) {
 #ifndef NO_WARN_IF_NOT_PDS
-        fprintf(stderr,
-         "Data set %s [filename %s] does not appear to be a PDS directory.\n",
+        warn("Data set %s [filename %s] does not appear to be a PDS directory.\n",
                 pds, filename);
 #endif
         return((NODE_PTR)(-1));
@@ -427,9 +872,7 @@ NODE_PTR _pds_mem(const char *pds, int *member_number, int alias_flag) {
     do {
         bytes = fread(&rec, 1, sizeof(rec), fp);
         if ((bytes != sizeof(rec)) && !feof(fp)) {
-            perror("FREAD:");
-            fprintf(stderr,"Failed in %s, line %d\n"
-               "Expected to read %d bytes but read %d bytes\n",
+            warn("fread(): failed in %s, line %d\nExpected to read %d bytes but read %d bytes\n",
                 __FILE__,__LINE__,sizeof(rec), bytes);
 #ifdef H_PERL
             croak("EFREAD\n");
@@ -541,7 +984,7 @@ static char *pm_add_name(NODE_PTR *node, char *name, NODE_PTR *last_ptr) {
      */
     newnode = (NODE_PTR)malloc(sizeof(NODE));
     if (newnode == NULL) {
-        fprintf(stderr,"malloc failed for %d bytes\n",sizeof(NODE));
+        warn("malloc failed for %d bytes\n",sizeof(NODE));
 #ifdef H_PERL
         croak("ENONMEM\n");
 #endif
@@ -606,7 +1049,6 @@ dynalloc(dyn_t_hash_ref)
 	    HV * myhash;
 	    __dyn_t dip;
 	    int rc;
-	    char *ewarnstr;
 	    if ( dyn_t_hash_ref != &PL_sv_undef) {
 		/* valid hash ref? */
 		if ( SvROK(dyn_t_hash_ref) ) {
@@ -635,8 +1077,8 @@ dynalloc(dyn_t_hash_ref)
 	            ST(0) = &PL_sv_yes;
 	        }
 	        else { 
-	            sprintf(ewarnstr, "dynalloc() failed with error code %hX, info code %hX", dip.__errcode, dip.__infocode);
-                    warn(ewarnstr);
+	            warn("dynalloc() failed with error code %hX, info code %hX",
+                          dip.__errcode, dip.__infocode);
 	            ST(0) = &PL_sv_undef;
 	        }
 	    }
@@ -653,7 +1095,6 @@ dynfree(dyn_t_hash_ref)
 	    HV * myhash;
 	    __dyn_t dip;
 	    int rc;
-	    char *ewarnstr;
 	    if ( dyn_t_hash_ref != &PL_sv_undef) {
 		/* valid hash ref? */
 		if ( SvROK(dyn_t_hash_ref) ) {
@@ -682,8 +1123,8 @@ dynfree(dyn_t_hash_ref)
 	            ST(0) = &PL_sv_yes;
 	        }
 	        else { 
-	            sprintf(ewarnstr, "dynfree() failed with error code %hX, info code %hX", dip.__errcode, dip.__infocode);
-                    warn(ewarnstr);
+	            warn("dynfree() failed with error code %hX, info code %hX",
+                          dip.__errcode, dip.__infocode);
 	            ST(0) = &PL_sv_undef;
 	        }
 	    }
@@ -708,10 +1149,10 @@ forward(fp)
 	    ST(0) = fseek(fp, 0L, SEEK_END) ? &PL_sv_undef : &PL_sv_yes;
 
 char *
-get_dcb(fp)
-	FILE *	fp
+get_dcb(sv)
+ 	SV * sv
 	PROTOTYPE: $
-	CODE:
+	INIT:
 	    /*
 	     * distillation of the fldata_t structure 
 	     * Table 17, pg 310 C/C++ MVS Library Reference
@@ -732,6 +1173,37 @@ get_dcb(fp)
 	    int i;
 	    char filename[MAXOSFILENAME+1];
 	    fldata_t fileinfo;
+	    FILE *	fp;
+	    STRLEN len;
+	    int needs_closing = 0;
+	    if ( sv != &PL_sv_undef) {
+		if ( SvROK(sv) ) { /* a reference */
+		    if ( SvTYPE(SvRV(sv)) == SVt_PVGV ) { /* valid filehandle ref? */
+	                fp = IoIFP(sv_2io(ST(0)));
+	            }
+                    else {
+	                XSRETURN_UNDEF;
+                    }
+	        }
+ 	        else {
+	            if (SvTYPE(sv) == SVt_PV) { /* if a plain scalar then try to fopen() */
+	                fp = fopen(SvPV(sv,len),"r");
+	                if (fp != Nullfp) {
+	                    needs_closing = 1;
+                        }
+                        else {
+	                    XSRETURN_UNDEF;
+                        }
+                    }
+                    else {
+	                XSRETURN_UNDEF;
+                    }
+	        }
+	    }
+	    else {
+	        XSRETURN_UNDEF;
+	    }
+	CODE:
 	    for (i=0; i<24; i++) {
 	        ST(i) = sv_newmortal();
 	    }
@@ -846,6 +1318,8 @@ get_dcb(fp)
                 sv_setiv(ST(21),fileinfo.__vsamRKP);
                 sv_setpv(ST(22),"dsname");
                 sv_setpv(ST(23),fileinfo.__dsname);
+	        if (needs_closing)
+	            fclose(fp);
 	        XSRETURN(24);
             }
             else {
@@ -853,12 +1327,43 @@ get_dcb(fp)
             }
 
 char *
-getname(fp)
-	FILE * fp
+getname(sv)
+ 	SV * sv
 	PROTOTYPE: $
-	CODE:
+	INIT:
+	    int needs_closing = 0;
+	    FILE * fp;
 	    char filename[MAXOSFILENAME+10];
 	    fldata_t fileinfo;
+	    STRLEN len;
+	    if ( sv != &PL_sv_undef) {
+		if ( SvROK(sv) ) { /* a reference */
+		    if ( SvTYPE(SvRV(sv)) == SVt_PVGV ) { /* valid filehandle ref? */
+	                fp = IoIFP(sv_2io(ST(0)));
+	            }
+                    else {
+	                XSRETURN_UNDEF;
+                    }
+	        }
+ 	        else {
+	            if (SvTYPE(sv) == SVt_PV) { /* if a plain scalar then try to fopen() */
+	                fp = fopen(SvPV(sv,len),"r");
+	                if (fp != Nullfp) {
+	                    needs_closing = 1;
+                        }
+                        else {
+	                    XSRETURN_UNDEF;
+                        }
+                    }
+                    else {
+	                XSRETURN_UNDEF;
+                    }
+	        }
+	    }
+	    else {
+	        XSRETURN_UNDEF;
+	    }
+	CODE:
 	    ST(0) = sv_newmortal();
 	    if ((fldata(fp,filename,&fileinfo)) == 0) {
                 sv_setpv(ST(0),filename);
@@ -866,6 +1371,8 @@ getname(fp)
             else {
 	        ST(0) = &PL_sv_undef;
             }
+	    if (needs_closing)
+	        fclose(fp);
 
 void
 mvsopen(name,mode)
@@ -975,23 +1482,159 @@ rewind(fp)
              */
 	    ST(0) = fseek(fp, 0L, SEEK_SET) ? &PL_sv_undef : &PL_sv_yes;
 
-char *
-svc99(parmstring)
-	PROTOTYPE: $
+int
+smf_record(smf_record_type,smf_record_subtype,smf_record)
+	int smf_record_type
+	int smf_record_subtype
+	char * smf_record
+	PROTOTYPE: @
+	INIT:
+	    int smf_record_length,rc;
 	CODE:
-	    struct __S99parms * parmstring;
-	    unsigned char s99verb;
-	    unsigned short s99flag1;
-	    unsigned int s99flag2;
-	    unsigned short s99error;
-	    unsigned short s99info;
-	    void * s99txtpp;
-	    unsigned char *s99rbln;
-	    void * s99s99x;
-	    /* catalogs and VTOCS are tough :-} */
-	    croak("svc99() not yet implemented.\n");
+            smf_record_length = strlen(smf_record);
 	    ST(0) = sv_newmortal();
-	    ST(0) = &PL_sv_undef;
+	    rc = __smf_record(smf_record_type,smf_record_subtype,smf_record_length,smf_record);
+	    switch (rc) {
+	        case 0:
+		    ST(0) = &PL_sv_yes;
+		    break;
+		case EINVAL:
+		    warn("smf_record() value specified of length '%d' was incorrect",smf_record_length);
+	            ST(0) = &PL_sv_undef;
+		    break;
+		case ENOMEM:
+		    warn("smf_record() not enough storage to complete __smf_record() call");
+	            ST(0) = &PL_sv_undef;
+		    break;
+		case EPERM:
+		    warn("smf_record() The calling process is not permitted access to the BPX.SMF facility class");
+	            ST(0) = &PL_sv_undef;
+		    break;
+		case EMVSERR:
+		    warn("smf_record() The SMF service returned '%d', __errno2 = %08x",rc,__errno2());
+	            ST(0) = &PL_sv_undef;
+		    break;
+		default:
+		    warn("smf_record() The SMF service returned '%d'",rc);
+	            ST(0) = &PL_sv_undef;
+		    break;
+	    }
+
+SV *
+svc99(S99struc_hash_ref)
+	SV * S99struc_hash_ref
+	PROTOTYPE: $
+	INIT:
+	    HV * my99hash;
+	    __S99parms parmstring;
+	    HE * entry;
+	    I32 retlen;
+	    SV * hval;
+	    STRLEN len;
+	    char * key;
+	    int got_any = 0;
+	    int warnings = 0;
+	    int i = 0;
+	    int j = 0;
+	    I32 num_tu = 0;
+	    char *tu[OS390_STDIO_SVC99_TEXT_UNITS] = { 
+	    	"", "", "", "", "", "", "", "", "", "", "", "",
+	    	"", "", "", "", "", "", "", "", "", "", "", ""
+	                                             };
+	    if ( S99struc_hash_ref != &PL_sv_undef) {
+		/* valid hash ref? */
+		if ( SvROK(S99struc_hash_ref) ) {
+		    if ( SvTYPE(SvRV(S99struc_hash_ref)) != SVt_PVHV ) {
+		        /* it is not a hashref */
+		        warn("svc99() requires a hash reference");
+	                XSRETURN_UNDEF;
+		    }
+		}
+		else {
+		    warn("svc99() requires a hash reference");
+	            XSRETURN_UNDEF;
+		}
+	    } 
+	    else {
+	        warn("svc99() called with undefined value.\n");
+	        XSRETURN_UNDEF;
+	    }
+	CODE:
+	    my99hash = (HV *)SvRV(S99struc_hash_ref);
+	    /* Initialize parmstring to '0'. */
+	    memset(&parmstring,0,sizeof(parmstring)); 
+	    /* Iterate over my99hash setting *parmstring elements. */
+	    (void)hv_iterinit(my99hash);
+	    while ((entry = hv_iternext(my99hash)))  {
+	        /* This is where s/^_+// takes place. */
+	        key = hv_iterkey(entry, &retlen); 
+	        while (*key == '_') { key++; }
+	        hval  = hv_iterval(my99hash, entry);
+	        if (strEQ(key,"S99VERB"))    { parmstring.__S99VERB = (unsigned char)SvIV(hval);        got_any++; }
+	   else if (strEQ(key,"S99FLAG1"))   { parmstring.__S99FLAG1 = (unsigned short)SvIV(hval);      got_any++; }
+	   /* note that FLAG2
+	    * "can only be filled in by APF authorized programs" */
+	   else if (strEQ(key,"S99FLAG2"))   { parmstring.__S99FLAG2 = (unsigned short)SvIV(hval);      got_any++; }
+	   else if (strEQ(key,"S99RBLN"))    { parmstring.__S99RBLN = (unsigned char)SvIV(hval);        got_any++; }
+	   else if (strEQ(key,"S99S99X"))    { parmstring.__S99S99X = (void * )SvPV(hval,len);          got_any++; }
+	    /* Treat "S99INFO" and "S99ERROR" as read only for now, 
+	     * do not even attempt to assign. */
+	    /* "S99TXTPP" should be an array ref and we ought to loop 
+	     * through an AV: */
+	   else if (strEQ(key,"S99TXTPP"))   {
+	       if ((!SvROK(hval))) {
+	           warn("value of S99TXTPP was not a reference.");
+	           warnings++;
+	           XSRETURN_UNDEF;
+	       }
+	       else if ( (SvTYPE(SvRV(hval)) != SVt_PVAV) ) {
+	           warn("value of S99TXTPP was not an array reference.");
+	           warnings++;
+	           XSRETURN_UNDEF;
+	       }
+	       num_tu = av_len((AV *)SvRV(hval));
+	       /* Arrary too large?  Is there a clever way not to do this? */
+	       if (  num_tu >= (OS390_STDIO_SVC99_TEXT_UNITS - 1) ) {
+	           warn("array reference passed into S99TXTPP too large, %d elements.",(num_tu+1));
+	           warnings++;
+	           XSRETURN_UNDEF;
+	       }
+	       for ( j=0; j<=num_tu; j++ ) {
+	           tu[j] = (char *)SvPV(*av_fetch((AV *)SvRV(hval), j, 0),len);
+	       }
+	       /* signal end */
+	       tu[num_tu] = (char *)((long unsigned) ( tu[num_tu] ) | OS390_STDIO_SVC99_MASK );
+	       parmstring.__S99TXTPP = (void * )tu; 
+	       got_any++;
+	   }
+	   /* rbx identifier           */
+/*        else if (strEQ(key,"S99EID"))    { rbxstring -> __S99EID = (char * )SvPV(hval,len);          got_any++; }
+ *      __S99EVER;  __S99EOPTS; __S99ESUBP; __S99EKEY; __S99EMGSV; __S99ENMSG; __S99ECPPL; __reserved;
+ *      __S99ERES; __S99ERCO; __S99ERCF; __S99EWRC; __S99EMSGP; __S99EERR; __S99EINFO; __reserv2;
+ */
+	   i++;
+	   if (got_any != i) {
+	       warn("svc99() warning key '%s' not recognized.\n",key);
+	       XSRETURN_UNDEF;
+	       warnings++;
+	       got_any = i; /* avoid war-ning for more than one unrecognized key */
+	   }
+	    }
+	    ST(0) = sv_newmortal();
+	    if ( !warnings ) {
+	        if (svc99(&parmstring) == 0) { 
+	            ST(0) = &PL_sv_yes;
+	        }
+	        else { 
+	            warn("svc99() failed with error code %hX, info code %hX", 
+                          parmstring.__S99ERROR, parmstring.__S99INFO);
+	            ST(0) = &PL_sv_undef;
+	        }
+	    }
+	    else {
+	        warn("svc99() unable to initialize struct __S99parms");
+	        ST(0) = &PL_sv_undef;
+	    }
 
 char *
 sysdsnr(name)
