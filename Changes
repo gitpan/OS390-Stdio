@@ -1,5 +1,30 @@
 ##################################################################
 
+Special notes for release 0.008:
+--------------------------------
+Some XS modifications were done to Stdio.xs so that this extension
+should compile under either Perl 5.6.1 (a version where Perl uses stdio) 
+or Perl 5.8.0 (Perl defaults to PerlIO) on z/OS.
+Very big thanks Brad Van Duser and Nick Ing-Simmons.
+
+Test failure reported under z/OS 1.2 with a dynamic loading Perl 5.8.0
+include:
+
+    ok 151
+    dynalloc() failed with error code 9700, info code 50 at test.pl line 535.
+    not ok 152
+    ok 153
+
+    ok 156
+    dynfree() failed with error code 438, info code 50 at test.pl line 567.
+    not ok 157
+    ok 158
+    svc99() failed with error code 484, info code 0 at test.pl line 617.
+    not ok 159
+    ok 160
+
+##################################################################
+
 Special notes for release 0.007:
 --------------------------------
 Nothing special, just some documentation fixes and a Makefile.PL

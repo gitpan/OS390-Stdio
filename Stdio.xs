@@ -1,7 +1,10 @@
 /*
  * OS390::Stdio - MVS extensions to stdio routines 
  *
- * Author:   Peter Prymmer  pvhp@best.com
+ * Author:   Peter Prymmer  pvhp@pvhp.best.vwh.net
+ * Version:  0.008
+ * Revised:  06-Oct-2002
+ * Revised:  30-Sep-2002
  * Version:  0.006
  * Revised:  25-May-2001
  * Version:  0.005
@@ -648,8 +651,13 @@ IV *pval;
 }
 
 
+#ifdef USE_PERLIO
+static SV *
+newFH(PerlIO *fp, char type) {
+#else
 static SV *
 newFH(FILE *fp, char type) {
+#endif
     SV *rv;
     GV **stashp, *gv = (GV *)NEWSV(0,0);
     HV *stash;
@@ -1179,7 +1187,11 @@ get_dcb(sv)
 	    if ( sv != &PL_sv_undef) {
 		if ( SvROK(sv) ) { /* a reference */
 		    if ( SvTYPE(SvRV(sv)) == SVt_PVGV ) { /* valid filehandle ref? */
+#ifdef USE_PERLIO
+	                fp = PerlIO_findFILE(IoIFP(sv_2io(ST(0))));
+#else
 	                fp = IoIFP(sv_2io(ST(0)));
+#endif
 	            }
                     else {
 	                XSRETURN_UNDEF;
@@ -1339,7 +1351,11 @@ getname(sv)
 	    if ( sv != &PL_sv_undef) {
 		if ( SvROK(sv) ) { /* a reference */
 		    if ( SvTYPE(SvRV(sv)) == SVt_PVGV ) { /* valid filehandle ref? */
+#ifdef USE_PERLIO
+	                fp = PerlIO_findFILE(IoIFP(sv_2io(ST(0))));
+#else
 	                fp = IoIFP(sv_2io(ST(0)));
+#endif
 	            }
                     else {
 	                XSRETURN_UNDEF;
@@ -1381,12 +1397,26 @@ mvsopen(name,mode)
 	PROTOTYPE: @
 	CODE:
 	    FILE * fp;
+#ifdef USE_PERLIO
+	    PerlIO * pio_fp;
+              SV *fh;
+#endif
+
 	    fp = fopen(name,mode);
+#ifdef USE_PERLIO
+	    if (fp != Null(FILE *)) {
+              pio_fp = PerlIO_importFILE(fp,mode);
+              fh = newFH(pio_fp,(mode[1] ? '+' : (mode[0] == 'r' ? '<' : (mode[0] == 'a' ? 'a' : '>'))));
+	      ST(0) = (fh ? sv_2mortal(fh) : &PL_sv_undef);
+	    }
+	    else { ST(0) = &PL_sv_undef; }
+#else
 	    if (fp != Nullfp) {
 	      SV *fh = newFH(fp,(mode[1] ? '+' : (mode[0] == 'r' ? '<' : (mode[0] == 'a' ? 'a' : '>'))));
 	      ST(0) = (fh ? sv_2mortal(fh) : &PL_sv_undef);
 	    }
 	    else { ST(0) = &PL_sv_undef; }
+#endif
 
 int
 mvswrite(fp,buffer,count)

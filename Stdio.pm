@@ -3,6 +3,7 @@
 #
 #   Author:  Peter Prymmer  pvhp@pvhp.best.vwh.net 
 #            adapted from Charles Bailey's VMS::Stdio V. 2.1
+#   Revised:  O6-Oct-2002
 #   Revised:  31-Aug-2002
 #   Revised:  25-May-2001
 #   Revised:  13-Apr-1999
@@ -17,7 +18,7 @@ use Carp '&croak';
 use DynaLoader ();
 use Exporter ();
  
-$VERSION = '0.007';
+$VERSION = '0.008';
 @ISA = qw( Exporter DynaLoader IO::File );
 
 my @STDIO_CONSTANTS = 
