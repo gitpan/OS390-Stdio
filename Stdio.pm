@@ -15,7 +15,7 @@ use Carp '&croak';
 use DynaLoader ();
 use Exporter ();
  
-$VERSION = '0.003';
+$VERSION = '0.004';
 @ISA = qw( Exporter DynaLoader IO::File );
 
 @EXPORT = qw( &KEY_FIRST &KEY_LAST &KEY_EQ &KEY_EQ_BWD 
@@ -101,7 +101,7 @@ OS390::Stdio - S/390 standard I/O functions via POSIX/XPG extensions
     sysread($fh,$data,128);
     close($fh);
     remove("dd:MYDD(MEM)");
-    @members = pds_mem("//SYS1.SPECIAL");
+    @members = pds_mem("//'SYS1.PARMLIB'");
 
 =head1 DESCRIPTION
 
@@ -265,17 +265,17 @@ For example:
 
 =item pds_mem NAME
 
-Returns a list of members for the named PDS directory.  A list with a 
-single C<undef> element is returned for PDS directories that have no 
-members as well as for data set names that are not partitioned (in the 
-latter case a warning may appear on STDERR depending on how 
+Returns a list of members (excluding ALIASes) for the named PDS directory.  
+A list with a single C<undef> element is returned for PDS directories that 
+have no members as well as for data set names that are not partitioned (in
+the latter case a warning may appear on STDERR depending on how 
 OS390::Stdio was compiled on your system).
 For example:
 
     use OS390::Stdio qw(pds_mem);
-    my @member_list = pds_mem("//SLATE.PDS");
+    my @member_list = pds_mem("//'SLATE.PDS'");
     foreach my $mem (@member_list) {
-        print "PDS.SLATE($mem)\n";
+        print "SLATE.PDS($mem)\n";
     }
 
 =item remove NAME
@@ -386,7 +386,9 @@ V 0.003: This routine is not yet implemented and causes a fatal error.
 
 =head1 REVISION
 
-This document was last revised on 13-Apr-1999, for Perl 5.005_03.
+This document was last revised on 14-Apr-2001, for Perl 5.6.1.
+
+13-Apr-1999, VERSION 0.003 for Perl 5.005_03.
 
 31-Aug-1998, VERSION 0.002 for Perl 5.005_02.
 

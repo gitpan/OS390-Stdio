@@ -1,5 +1,16 @@
 ##################################################################
 
+Special notes for release 0.004:
+--------------------------------
+The pds_mem() routine now does a better job of EXTENDing the 
+perl XS ST-ack and ought to work with PDS'es that have more than
+100 members.  It does not list ALIAS members as was noted
+in testing (and documented in Stdio.pm).  A more extensive
+test of pds_mem() has yet to be written.  All 70 tests ought to
+pass for you though.
+
+##################################################################
+
 Special notes for release 0.003:
 --------------------------------
 The pds_mem() function is now functional.

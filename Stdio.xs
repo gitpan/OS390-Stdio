@@ -2,6 +2,8 @@
  * OS390::Stdio - MVS extensions to stdio routines 
  *
  * Author:   Peter Prymmer  pvhp@best.com
+ * Version:  0.004
+ * Revised:  14-Apr-2001
  * Version:  0.003
  * Revised:  10-Apr-1999
  * Version:  0.001
@@ -286,6 +288,8 @@ h2dyn_t(HV *hip) {
  ********* "This information is included to aid you  ***************
  *********  in such a task and is B<not> programming ***************
  *********  interface information."                  ***************
+ ********* Among other possible problems it does not ***************
+ ********* return ALIAS members (sigh).              ***************
  *********  - caveat scriptor.                       ***************
  *******************************************************************
  */
@@ -758,17 +762,19 @@ pds_mem(pds)
 	char * pds
 	PROTOTYPE: $
 	CODE:
+	    NODE_PTR my_mem_orig;
 	    NODE_PTR my_mem;
 	    NODE_PTR next_mem;
 	    char * member_name;
 	    char * blank;
+	    SV * tmp;
 	    int i = 0;
 	    my_mem = _pds_mem(pds);
+	    my_mem_orig = my_mem;
 	    next_mem = my_mem;
 	    if (next_mem == (NODE_PTR)(-1)) {
 	        ST(0) = sv_newmortal();
 	        ST(0) = &PL_sv_undef;
-	        /* XSRETURN(1); */ 
 	    }
 	    else if (next_mem == NULL) {
 	        ST(0) = sv_newmortal();
@@ -776,20 +782,33 @@ pds_mem(pds)
 	        XSRETURN(1);  
 	    }
 	    else {
-                /* put linked list names onto ST array */
+                /* count the number of members we have seen */
+	        while (next_mem != NULL) {
+	            i++;
+	            next_mem = my_mem->next;
+	            my_mem = next_mem;
+	        }
+                /* extend perl return ST-ack by an appropriate amount */
+		EXTEND(sp,i+1);
+                /* reset pointers for second pass */
+	        next_mem = my_mem_orig;
+	        my_mem = my_mem_orig;
+                /*
+                 * put linked list names onto ST array, sans blank characters.
+                 * Free the mallocs too.
+                 */
 	        while (next_mem != NULL) {
 		    member_name = my_mem->name;
 		    blank = strchr(member_name,' ');
                     if (blank != NULL)
 		        *blank = '\0';
-	            ST(i) = sv_newmortal();
-	            sv_setpv(ST(i),member_name);
-	            i++;
+                    tmp = sv_2mortal(newSVpvn(member_name,strlen(member_name)));
+	            PUSHs(tmp);
 	            next_mem = my_mem->next;
 	            free(my_mem);
 	            my_mem = next_mem;
 	        }
-	        XSRETURN(i);
+	        XSRETURN(i+1);
 	    }
 
 void

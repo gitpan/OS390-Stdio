@@ -24,10 +24,6 @@ print <<EOPDS;
 In order to test the OS390::Stdio::pds_mem() routine
 I will need the name of a readable partitioned data set 
 (PDS) and a readable non PDS (e.g. a sequential data set).
-If you know there is a PDS called 'HLQ.PDS' on your 
-system then please give me a name like //PDS
-that is, with two leading slashes and without the
-HLQ portion.
 
 EOPDS
 
@@ -52,7 +48,7 @@ my %pds_dcb = get_dcb($pdsh);
 close($pdsh);
 if ($pds_dcb{'dsorg'} !~ 'POPDSdir') 
 {
-    warn "Oops that PDS name $pds was not a PDS. Let's start over.\n";
+    warn "Oops that name $pds was not a PDS. Let's start over.\n";
     goto Input_pds;
 }
 my @members = pds_mem($pds);
@@ -74,10 +70,6 @@ print <<EOSEQ;
 
 For testing I now need to know the name of a readable data set 
 that is not a PDS.  For example, a sequential data set will do.
-If there is a data set called 'HLQ.SEQ' on your 
-system then please give me a name like //SEQ
-that is, with two leading slashes and without the
-HLQ portion.
 
 EOSEQ
 
@@ -108,7 +100,7 @@ if ($seq_dcb{'dsorg'} =~ 'PDSdir')
 }
 my @non_members = pds_mem($seq);
 if (!defined($non_members[0]) && $#non_members == 0) {
-    print "OK.  Calling pds_mem($seq) gave results as expected.\n";
+    print "\nOK.  Calling pds_mem($seq) gave results as expected.\n";
 }
 else {
     print "Hmm.  There was a problem.\n";
@@ -126,14 +118,14 @@ sub cleanse_name {
     my $ds = shift;
     my $input = $ds;
     # upcase
-    $ds =~ tr/[a-z]/[A-Z]/;
+    $ds =~ tr/a-z/A-Z/;
     # add two leading slashes if necessary
     $ds = ($ds =~ /^\/\//) ? $ds : "/$ds";
     $ds = ($ds =~ /^\/\//) ? $ds : "/$ds";
     # strip any (MEMBER) name
-    $ds =~ s/\([^\)]*\)//;
+    # $ds =~ s/\([^\)]*\)//;
     # strip quotation marks
-    $ds =~ s/\'//g;
+    # $ds =~ s/\'//g;
     if ($ds ne $input) { print "Converting $input to $ds.\n\n"; }
     return($ds);
 }
