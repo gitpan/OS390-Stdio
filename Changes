@@ -1,5 +1,13 @@
 ##################################################################
 
+Special notes for release 0.007:
+--------------------------------
+Nothing special, just some documentation fixes and a Makefile.PL
+fix for compatibility with the MakeMaker that ships with Perl 5.8.0.
+Thanks to Vincent Herried and Brad Van Duser.
+
+##################################################################
+
 Special notes for release 0.006:
 --------------------------------
 The svc99() routine is now functional.

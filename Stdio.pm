@@ -1,8 +1,9 @@
 #
-#   OS390::Stdio - S/390 (MVS) extensions to Perl's stdio calls
+#   OS390::Stdio - z/OS, S/390 (MVS) extensions to Perl's stdio calls
 #
-#   Author:  Peter Prymmer  pvhp@best.com  pvhp@forte.com
+#   Author:  Peter Prymmer  pvhp@pvhp.best.vwh.net 
 #            adapted from Charles Bailey's VMS::Stdio V. 2.1
+#   Revised:  31-Aug-2002
 #   Revised:  25-May-2001
 #   Revised:  13-Apr-1999
 #   Previous: 31-Aug-1998
@@ -16,7 +17,7 @@ use Carp '&croak';
 use DynaLoader ();
 use Exporter ();
  
-$VERSION = '0.006';
+$VERSION = '0.007';
 @ISA = qw( Exporter DynaLoader IO::File );
 
 my @STDIO_CONSTANTS = 
@@ -154,7 +155,7 @@ __END__
 
 =head1 NAME
 
-OS390::Stdio - OS/390 standard I/O functions with POSIX/XPG extensions
+OS390::Stdio - z/OS and OS/390 standard I/O functions with POSIX/XPG extensions
 
 =head1 SYNOPSIS
 
@@ -187,10 +188,10 @@ OS390::Stdio - OS/390 standard I/O functions with POSIX/XPG extensions
 
 =head1 DESCRIPTION
 
-This package gives Perl scripts access via POSIX extensions to several
-C stdio operations not available through Perl's CORE I/O functions.
-The specific routines are described below.  These functions are
-prototyped as unary operators, with the exception of C<mvsopen>
+This package gives Perl scripts running on z/OS or OS/390 access via POSIX 
+extensions to several C stdio operations not available through Perl's CORE 
+I/O functions.  The specific routines are described below.  These functions
+are prototyped as unary operators, with the exception of C<mvsopen>
 which takes two arguments, C<mvswrite> and C<smf_record> each of which 
 takes three arguments, C<svc99> which take several arguments, 
 and C<tmpnam> which takes none.
@@ -234,7 +235,7 @@ the IO::File methods.
 =head1 CONSTANTS
 
 The constants handled by OS390::Stdio derive from #define preprocessor statements
-in three C header files: stdio.h, fcntl.h, and dynit.h.
+in three C header files on z/OS or OS/390: stdio.h, fcntl.h, and dynit.h.
 
 =head2 stdio.h constants
 
@@ -782,7 +783,7 @@ This function returns a ds list for a given HLQ plus optional additional
 qualifiers.  It returns C<undef> if it encounters an error.  (The name 
 was taken from the ISPF 3.4 panel entry).  See also C<vol_ser>.
 
-V 0.003: This routine is not yet implemented and causes a fatal error.
+V 0.003..0.007: This routine is not yet implemented and causes a fatal error.
 
 Until this is working properly you can from perl code things such as:
 
@@ -793,14 +794,14 @@ Until this is working properly you can from perl code things such as:
 Returns a dslist for a given volume serial input.   (The name was taken
 from the ISPF 3.4 panel entry).
 
-V 0.003: This routine is not yet implemented and causes a fatal error.
+V 0.003..0.007: This routine is not yet implemented and causes a fatal error.
 
 =back
 
 =head1 DIAGNOSTICS
 
 The following messages may be seen when programming with this
-module:
+extension:
 
 =over 4
 
@@ -930,7 +931,9 @@ dsname_level() and vol_ser() are not yet implemented.
 
 =head1 REVISION
 
-This document was last revised on 13-June-2001, for Perl 5.6.1.
+This document was last revised on 31-August-2002, for Perl 5.8.0.
+
+13-June-2001, VERSION 0.006 for Perl 5.6.1.
 
 18-May-2001, VERSION 0.005 for Perl 5.6.1.
 
