@@ -4,33 +4,33 @@
 
 use strict;
 use OS390::Stdio;
-import OS390::Stdio qw(&flush &forward &getname &get_dcb 
-                       &mvsopen &mvswrite 
+import OS390::Stdio qw(&dynalloc &dynfree &flush &forward &getname &get_dcb 
+                       &mvsopen &mvswrite &pds_mem
                        &remove &resetpos &rewind &sysdsnr &tmpnam
                       );
 
 my $DIAG = $ENV{'OS390_STDIO_DIAG'};
 my $GORY = $ENV{'OS390_STDIO_GORY'};
 
-print "1..70\n";
+print "1..76\n";
 my $t = 1;
 print "# OK how did the import go?\n" if $DIAG;
+print +(defined(&dynalloc) ? '' : 'not '), "ok $t\n"; $t++;
+print +(defined(&dynfree) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&flush) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&forward) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&getname) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&get_dcb) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&mvsopen) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&mvswrite) ? '' : 'not '), "ok $t\n"; $t++;
+print +(defined(&pds_mem) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&remove) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&resetpos) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&rewind) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&sysdsnr) ? '' : 'not '), "ok $t\n"; $t++;
 print +(defined(&tmpnam) ? '' : 'not '), "ok $t\n"; $t++;
-print "# we did't yet ask for the unimplemented subs:\n" if $DIAG;
+print "# we didn't yet ask for the unimplemented subs:\n" if $DIAG;
 print +(!defined(&dsname_level) ? '' : 'not '), "ok $t\n"; $t++;
-print +(!defined(&dynalloc) ? '' : 'not '), "ok $t\n"; $t++;
-print +(!defined(&dynfree) ? '' : 'not '), "ok $t\n"; $t++;
-print +(!defined(&pds_mem) ? '' : 'not '), "ok $t\n"; $t++;
 print +(!defined(&svc99) ? '' : 'not '), "ok $t\n"; $t++;
 print +(!defined(&vol_ser) ? '' : 'not '), "ok $t\n"; $t++;
 print +(!defined(&vsamdelrec) ? '' : 'not '), "ok $t\n"; $t++;
@@ -99,7 +99,7 @@ print +(($dcb{'vsamtype'} eq "NOTVSAM") ? '' : 'not '),"ok $t\n"; $t++;
                                            #vsamtype = NOTVSAM
 print +(($dcb{'vsamRKP'}==0) ? '' : 'not '),"ok $t\n"; $t++; 
                                            #vsamRKP = 0
-if ($DIAG) { for(sort(keys(%dcb))) { print "$_ = $dcb{$_}\n"; } }
+if ($DIAG) { print "# dcb was:\n"; for(sort(keys(%dcb))) { print "## $_ = $dcb{$_}\n"; } }
 
 print "#$t attempts to rewind\n" if $DIAG;
 print +(rewind($fh) ? '' : 'not '),"ok $t\n"; $t++;
@@ -129,9 +129,9 @@ print "#$t attempts to compare the line read to =>$date_str<=\n";
 if ($GORY) {
 print <<"EOGORY0"
 #$t attempts to compare the line read 
-=>$line<=
-to
-=>$date_str<=
+#=>$line<=
+#to
+#=>$date_str<=
 EOGORY0
 }
 print +($line eq $date_str ? '' : 'not '), "ok $t\n"; $t++;
@@ -172,9 +172,9 @@ print "#$t attempts to compare the line read to =>$date_str<=\n";
 if ($GORY) {
 print <<"EOGORY1"
 #$t attempts to compare the line read 
-=>$line<=
-to
-=>$date_str<=
+#=>$line<=
+#to
+#=>$date_str<=
 EOGORY1
 }
 print +($line eq $date_str ? '' : 'not '), "ok $t\n"; $t++;
@@ -193,8 +193,8 @@ my $tmpnam = &OS390::Stdio::tmpnam();
 print +($tmpnam ? '' : 'not '),"ok $t\n";
 print "#$t tempnam=>$tmpnam<=\n" if $DIAG; $t++;
 
-print "#$t attempts to open a temporary dataset\n" if $DIAG;
 my $tmp_name = '//&&TST' . substr($$,0,3);
+print "#$t attempts to open a temporary dataset: $tmp_name\n" if $DIAG;
 my $tmp_dsh = mvsopen($tmp_name, "w+");
 print +($tmp_dsh ? '' : 'not '),"ok $t\n";
 print "#$t tmp_name=>$tmp_name<=\n" if $DIAG; $t++;
@@ -227,7 +227,7 @@ print "#$t line=>$line<=\n" if $GORY; $t++;
 print "#$t checking list context: date_str . linefeed x 2\n" if $DIAG;
 my @lines = <$tmp_dsh>;
 print +(join('',@lines) eq "$date_str\n" x 2 ? '' : 'not '),"ok $t\n"; $t++;
-print "lines=>\n",@lines,"<=\n" if $DIAG;
+print "#lines=>\n",map{ "## $_"} @lines,"<=\n" if $DIAG;
 
 print "#$t rewind\n" if $DIAG;
 print +(rewind($tmp_dsh) ? '' : 'not '),"ok $t\n"; $t++;
@@ -284,9 +284,9 @@ print +(rewind($tmp_dsh) ? '' : 'not '),"ok $t\n"; $t++;
 @lines = <$tmp_dsh>;
 print "#$t check number of lines -1 in whole dataset =>$#lines<=\n" if $DIAG;
 print +(($#lines == 3 ) ? '' : 'not '),"ok $t\n"; $t++;
-print "lines =>\n",@lines,"<=\n" if $DIAG;
+print "# lines =>\n",map {"## $_"} @lines,"<=\n" if $DIAG;
 
-print "#$t deallocates temp dataset\n" if $DIAG;
+print "#$t closes (and deallocates) temp dataset\n" if $DIAG;
 close($tmp_dsh);
 print +($! ? '' : 'not ($1)'),"ok $t\n"; $t++;
 
@@ -294,5 +294,55 @@ print +($! ? '' : 'not ($1)'),"ok $t\n"; $t++;
 print "#$t after closing sysdsnr ing =>$alloc_name<=\n" if $DIAG;
 print +(sysdsnr("$alloc_name") ? 'not ' : ''),"ok $t\n"; $t++;
 
-print "t at end =>$t<=\n" if $DIAG;
+##########################
+print "#$t attempts to dynalloc a temporary PDS: $gotname\n" if $DIAG;
+my $tmp_dynhsh = {( 
+                    ddname  => "MYDD",          # //MYDD  DD
+                    dsname  => "$gotname",      # //  DSN=$gotname,
+                    status  =>  0x04,           # //  DISP=(NEW,
+                    normdisp => 0x02,           # //        CATLG,
+#                    normdisp => 0x04,           # //        DELETE,
+#                    conddisp => 0x04,           # //        DELETE),
+                    alcunit => '\x01',          # //  SPACE=(CYL,
+                    primary => 1,               # //         1,
+                    dirblk  => 1,               # //         1),
+                    misc_flags => (0x02|0x08),  # //           RLSE,CONTIG),
+                    recfm => 0x80 + 0x10,       # //   RECFM=FB,
+                    lrecl => 80,                # //   LRECL=80,
+                    blksize => 6080             # //   BLKSIZE=6080 
+                 )};
+print +(dynalloc($tmp_dynhsh) ? '' : 'not '),"ok $t\n"; $t++;
+
+my $new_name = $gotname;
+$new_name =~ s/'//g;
+print "# attempt to write into \"//'$new_name(MEM1)'\"\n" if $DIAG;
+my $tfh = OS390::Stdio::mvsopen("//'$new_name(MEM1)'", "w");
+$numwritten = mvswrite($tfh,$new_date_str,length($new_date_str));
+close($tfh);
+print "# $numwritten were written into MEM1\n" if $DIAG;
+print "# attempt to write into \"//'$new_name(MEM2)'\"\n" if $DIAG;
+my $ufh  = OS390::Stdio::mvsopen("//'$new_name(MEM2)'","w");
+my $numwritten2 = mvswrite($ufh,$new_date_str,length($new_date_str));
+close($ufh);
+print "# $numwritten2 were written into MEM2\n" if $DIAG;
+print +((($numwritten + $numwritten2) == 2 * length($new_date_str) ) ? '' : 'not '),"ok $t\n"; $t++;
+print "#$t attempts to list members with pds_mem(\"//$gotname\")\n" if $DIAG;
+my @pds_mem = pds_mem("//$gotname");
+my %my_pds = ();
+my $pds_tot = 0;
+for (sort(@pds_mem)) { $my_pds{$_}++; $pds_tot += $my_pds{$_}; }
+print +(defined($my_pds{'MEM1'}) ? '' : 'not '),"ok $t\n"; $t++;
+print "# members seen:\n", map {"## $_\n"} @pds_mem if $DIAG;
+print "# members defined:\n", map {"## $_ = $my_pds{$_}\n"} sort(keys(%my_pds)) if $DIAG;
+print "#$t makes sure list total: $pds_tot is equal to ",scalar(@pds_mem),"\n" if $DIAG;
+print +((scalar(@pds_mem) == $pds_tot) ? '' : 'not '),"ok $t\n"; $t++;
+
+print "#$t attempts to dynfree a temporary PDS: $gotname\n" if $DIAG;
+print +(dynfree($tmp_dynhsh) ? '' : 'not '),"ok $t\n"; $t++;
+
+print "#$t verify removal of the data set used for pds_mem,dyn* testing\n" if $DIAG;
+print +(sysdsnr("$gotname") ? 'not ' : ''),"ok $t\n"; $t++;
+##########################
+
+print "#t at end =>$t<=\n" if $DIAG;
 

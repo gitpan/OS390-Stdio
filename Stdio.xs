@@ -2,6 +2,8 @@
  * OS390::Stdio - MVS extensions to stdio routines 
  *
  * Author:   Peter Prymmer  pvhp@best.com
+ * Version:  0.005
+ * Revised:  17-May-2001
  * Version:  0.004
  * Revised:  14-Apr-2001
  * Version:  0.003
@@ -19,6 +21,12 @@
  *
  */
 
+/* 
+ * We won't need to resort to this pragma if we set _EXT and compile with
+ * c89 -DOEMVS -D_OE_SOCKETS -D_XOPEN_SOURCE_EXTENDED -D_ALL_SOURCE 
+ * #pragma LANGLVL(EXTENDED)
+ */
+
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -27,6 +35,7 @@
 #include <sys/file.h>
 #include <fcntl.h>
 #include <stdio.h>
+/* dynit.h for __dyn_t, dyninit(), dynalloc(), and dynfree() */
 #include <dynit.h>
 /* for pds_mem() */
 #include <string.h>
@@ -67,6 +76,9 @@ IV *pval;
          return FALSE;
  */
 
+/*
+ * The KEY_* and RBA_* constants are used with
+ */
     if (strEQ(name, "KEY_FIRST"))
 #ifdef __KEY_FIRST
 	{ *pval = __KEY_FIRST; return TRUE; }
@@ -110,7 +122,8 @@ IV *pval;
 	return FALSE;
 #endif
 
-/*  The O_ constants are typically used with open() 
+/*
+ *  The O_ constants are typically used with open() 
  *  [hence they may not be useful here]
  */
     if (strEQ(name, "O_APPEND"))
@@ -168,6 +181,19 @@ IV *pval;
 	return FALSE;
 #endif
 
+/*
+ * __dyn_t constants for use with dyninit()/dynalloc()/dynfree()
+ */
+    if (strEQ(name, "DISP_NEW"))
+#ifdef __DISP_NEW
+	{ *pval = __DISP_NEW; return TRUE; }
+#else
+	return FALSE;
+#endif
+
+/*
+ * default fallthrough is FALSE
+ */
     return FALSE;
 }
 
@@ -207,65 +233,15 @@ newFH(FILE *fp, char type) {
     return sv_bless(rv,stash);
 }
 
-static void
-h2dyn_t(HV *hip) {
-    #ifdef _EXT
-      __dyn_t ip;
-    #else
-      struct __dyn_t *ip;
-    #endif
+int 
+#ifdef _EXT
+h2dyn_t(__dyn_t *ip, HV *hip, int free_flag) {
+#else
+h2dyn_t(struct __dyn_t *ip, HV *hip, int free_flag) {
+#endif
     /*
      * __dyn_t structure Table 16, pp 218-220 C/C++ MVS Library Reference
      */
-    char * ddname;
-    char * dsname;
-    char sysout;
-    char sysoutname[44];
-    char * member;
-    char status;
-    char normdisp;
-    char conddisp;
-    char * unit;
-    char * volser;
-    char dsorg[7];   /* 'unknown' */
-    char alcunit;
-    int primary;
-    int secondary;
-    int dirblk;
-    int avgblk;
-    short recfm;
-    short blksize;
-    unsigned short lrecl;
-    char volrefds[44];
-    char dcbrefds[44];
-    char dcbrefdd[9];
-    unsigned char misc_flags;
-    unsigned char CLOSE;
-    unsigned char RELEASE;
-    unsigned char CONTIG;
-    unsigned char ROUND;
-    unsigned char TERM;
-    unsigned char DUMMY_DSN;
-    unsigned char HOLDQ;
-    unsigned char PERM;
-    char password[8];
-    char ** miscitems;
-    short infocode;
-    short errcode;
-    char * storclass;
-    char * stmgntclass;
-    char * dataclass;
-    char recorg;
-    short keyoffset;
-    short keylength;
-    char * refdd;
-    char * like;
-    char dsntype;
-    char * pathname;
-    int pathopts;
-    int pathmode;
-    char pathndisp;
-    char pathcdisp;
     #ifdef _EXT
     /*  s99rbx_t rbx; */
       struct s99rbx_t * rbx;
@@ -275,7 +251,68 @@ h2dyn_t(HV *hip) {
     /*
      *
      */
+    HE * entry;
+    I32 retlen;
+    SV * hval;
+    STRLEN len;
+    char * key;
+    int got_free = 0;
+    int got_any  = 0;
+    int i = 0;
+
+    /* Iterate over hip setting *ip elements.  This is where s/^_+// takes place */
+        /* Strictly this "miscitems" is not char ** but char * instead. */
+    (void)hv_iterinit(hip);
+    while ((entry = hv_iternext(hip)))  {
+        key = hv_iterkey(entry, &retlen); 
+        hval  = hv_iterval(hip, entry);
+             if (strEQ(key,"ddname"))     { ip -> __ddname = SvPV(hval,len);       got_any++; got_free++; }
+        else if (strEQ(key,"dsname"))     { ip -> __dsname = SvPV(hval,len);       got_any++; got_free++; }
+        else if (strEQ(key,"sysout") )    { ip -> __sysout = (char)SvIV(hval);     got_any++; }
+        else if (strEQ(key,"sysoutname")) { ip -> __sysoutname = SvPV(hval,len);   got_any++; }
+        else if (strEQ(key,"member"))     { ip -> __member = SvPV(hval,len);       got_any++; got_free++; }
+        else if (strEQ(key,"status"))     { ip -> __status = (char)SvIV(hval);     got_any++; }
+        else if (strEQ(key,"normdisp"))   { ip -> __normdisp = (char)SvIV(hval);   got_any++; got_free++; }
+        else if (strEQ(key,"conddisp"))   { ip -> __conddisp = (char)SvIV(hval);   got_any++; }
+        else if (strEQ(key,"unit"))       { ip -> __unit = SvPV(hval,len);         got_any++; }
+        else if (strEQ(key,"volser"))     { ip -> __volser = SvPV(hval,len);       got_any++; }
+        else if (strEQ(key,"dsorg"))      { ip -> __dsorg = (short)SvIV(hval);     got_any++; } 
+        else if (strEQ(key,"alcunit"))    { ip -> __alcunit = (char)SvIV(hval);    got_any++; }
+        else if (strEQ(key,"primary"))    { ip -> __primary = SvIV(hval);          got_any++; }
+        else if (strEQ(key,"secondary"))  { ip -> __secondary = SvIV(hval);        got_any++; }
+        else if (strEQ(key,"dirblk"))     { ip -> __dirblk = SvIV(hval);           got_any++; }
+        else if (strEQ(key,"avgblk"))     { ip -> __avgblk = SvIV(hval);           got_any++; }
+        else if (strEQ(key,"recfm"))      { ip -> __recfm  = (short)SvIV(hval);    got_any++; }
+        else if (strEQ(key,"blksize"))    { ip -> __blksize = (short)SvIV(hval);   got_any++; }
+        else if (strEQ(key,"lrecl"))      { ip -> __lrecl = (unsigned short)SvIV(hval); got_any++; }
+        else if (strEQ(key,"volrefds"))   { ip -> __volrefds = SvPV(hval,len);     got_any++; }
+        else if (strEQ(key,"dcbrefds"))   { ip -> __dcbrefds = SvPV(hval,len);     got_any++; }
+        else if (strEQ(key,"dcbrefdd"))   { ip -> __dcbrefdd = SvPV(hval,len);     got_any++; }
+        else if (strEQ(key,"misc_flags")) { ip -> __misc_flags = (unsigned char)SvIV(hval); got_any++; }
+        else if (strEQ(key,"password"))   { ip -> __password = SvPV(hval,len);     got_any++; }
+        else if (strEQ(key,"miscitems"))  { ip -> __miscitems = (char **)SvPV(hval,len);  got_any++; got_free++; }
+        else if (strEQ(key,"infocode"))   { ip -> __infocode = (short)SvIV(hval);  got_any++; }
+        else if (strEQ(key,"errcode"))    { ip -> __errcode = (short)SvIV(hval);   got_any++; }
+        else if (strEQ(key,"storclass"))  { ip -> __storclass = SvPV(hval,len);    got_any++; }
+        else if (strEQ(key,"mgntclass"))  { ip -> __mgntclass = SvPV(hval,len);    got_any++; }
+        else if (strEQ(key,"dataclass"))  { ip -> __dataclass = SvPV(hval,len);    got_any++; }
+        else if (strEQ(key,"recorg"))     { ip -> __recorg = (char)SvIV(hval);     got_any++; }
+        else if (strEQ(key,"keyoffset"))  { ip -> __keyoffset = (short)SvIV(hval); got_any++; }
+        else if (strEQ(key,"keylength"))  { ip -> __keylength = (short)SvIV(hval); got_any++; }
+        else if (strEQ(key,"refdd"))      { ip -> __refdd = SvPV(hval,len);        got_any++; }
+        else if (strEQ(key,"like"))       { ip -> __like = SvPV(hval,len);         got_any++; }
+        else if (strEQ(key,"dsntype"))    { ip -> __dsntype = (char)SvIV(hval);    got_any++; }
+        else if (strEQ(key,"pathname"))   { ip -> __pathname = SvPV(hval,len);     got_any++; got_free++; }
+        else if (strEQ(key,"pathopts"))   { ip -> __pathopts = SvIV(hval);         got_any++; }
+        else if (strEQ(key,"pathmode"))   { ip -> __pathmode = SvIV(hval);         got_any++; }
+        else if (strEQ(key,"pathndisp"))  { ip -> __pathndisp = (char)SvIV(hval);  got_any++; got_free++; }
+        else if (strEQ(key,"pathcdisp"))  { ip -> __pathcdisp = (char)SvIV(hval);  got_any++; }
+        i++;
+        /* if (!free_flag && got_any != i) {} */
+    }
+    return(i);
 }
+
 /***************/
 /*
  *******************************************************************
@@ -307,7 +344,7 @@ typedef struct node {
                     } NODE, *NODE_PTR;
 
 /*
- * NODE_PTR _pds_mem(const char *pds):
+ * NODE_PTR _pds_mem(const char *pds, int *member_number, int alias_flag):
  *
  * pds must be a fully qualified pds name, for example,
  * ID.PDS.DATASET * returns a * pointer to a linked list of
@@ -333,17 +370,18 @@ typedef struct {
 } RECORD;
 
 /*
- * static int gen_node(NODE_PTR *node, RECORD *rec, NODE_PTR *last_ptr);
+ * static int gen_node(NODE_PTR *node, RECORD *rec, NODE_PTR *last_ptr, int * count, int want_alias);
  */
 static char *pm_add_name(NODE_PTR *node, char *name, NODE_PTR *last_ptr);
 
 /* the heart of the beast */
-NODE_PTR _pds_mem(const char *pds) {
+NODE_PTR _pds_mem(const char *pds, int *member_number, int alias_flag) {
     FILE *fp;
     int bytes;
     NODE_PTR node, last_ptr;
     RECORD rec;
     int list_end;
+    int member_count = -1;
     char *qual_pds;
     char filename[MAXOSFILENAME+1];
     fldata_t fileinfo;
@@ -385,6 +423,7 @@ NODE_PTR _pds_mem(const char *pds) {
 #endif
         return((NODE_PTR)(-1));
     }
+    member_count = 0;
     do {
         bytes = fread(&rec, 1, sizeof(rec), fp);
         if ((bytes != sizeof(rec)) && !feof(fp)) {
@@ -397,9 +436,11 @@ NODE_PTR _pds_mem(const char *pds) {
 #endif
             return((NODE_PTR)(-1));
         }
-        list_end = gen_node(&node, &rec, &last_ptr);
+ /*       list_end = gen_node(&node, &rec, &last_ptr, &member_count, 0); */
+        list_end = gen_node(&node, &rec, &last_ptr, &member_count, alias_flag);
     } while (!feof(fp) && !list_end);
     fclose(fp);
+    *member_number = member_count;
     return(node);
 }
 /*
@@ -438,12 +479,14 @@ NODE_PTR _pds_mem(const char *pds) {
  */
 #define SKIP_MASK ((unsigned int) 0x1F)
 
-static int gen_node(NODE_PTR *node, RECORD *rec, NODE_PTR *last_ptr) {
+static int gen_node(NODE_PTR *node, RECORD *rec, NODE_PTR *last_ptr, int *member_count, int want_alias) {
     char *ptr, *name;
     int skip, count = 2;
+    int member_number;
     unsigned int info_byte, alias, ttrn;
     char ttr[TTRLEN];
     int list_end = 0;
+    member_number = *member_count;
     ptr = rec->rest;
     while(count < rec->count) {
         /*
@@ -462,11 +505,29 @@ static int gen_node(NODE_PTR *node, RECORD *rec, NODE_PTR *last_ptr) {
         /* info_byte */
         info_byte = (unsigned int) (*ptr);
         alias = info_byte & ALIAS_MASK;
-        if (!alias) pm_add_name(node,name,last_ptr);
+        switch (want_alias) {
+	case 0:
+            if (!alias) {
+                 pm_add_name(node,name,last_ptr);
+                 member_number++;
+            }
+            break;
+	case 1:
+            if (alias) {
+                 pm_add_name(node,name,last_ptr);
+                 member_number++;
+            }
+            break;
+	case 2:
+            pm_add_name(node,name,last_ptr);
+            member_number++;
+            break;
+        }
         skip = (info_byte & SKIP_MASK) * 2 + 1;
         ptr += skip;
         count += (TTRLEN + NAMELEN + skip);
     }
+    *member_count = member_number;
     return(list_end);
 }
 /*
@@ -532,29 +593,104 @@ dsname_level(fp)
 	CODE:
 	    char vmsdef[8], es[8], sep;
 	    unsigned long int retsts;
+	    /* catalogs and VTOCS are tough :-} */
 	    croak("dsname_level() not yet implemented.\n");
 	    if (fsync(fileno(fp))) { ST(0) = &PL_sv_undef; }
 	    else                   { clearerr(fp); ST(0) = &PL_sv_yes; }
 
-char *
-dynalloc(fp)
-	FILE * fp
+SV *
+dynalloc(dyn_t_hash_ref)
+	SV * dyn_t_hash_ref
 	PROTOTYPE: $
+	INIT:
+	    HV * myhash;
+	    __dyn_t dip;
+	    int rc;
+	    char *ewarnstr;
+	    if ( dyn_t_hash_ref != &PL_sv_undef) {
+		/* valid hash ref? */
+		if ( SvROK(dyn_t_hash_ref) ) {
+		    if ( SvTYPE(SvRV(dyn_t_hash_ref)) != SVt_PVHV ) {
+		        /* it is not a hashref */
+		        warn("dynalloc() requires a hash reference");
+	                XSRETURN_UNDEF;
+		    }
+		}
+		else {
+		    warn("dynalloc() requires a hash reference");
+	            XSRETURN_UNDEF;
+		}
+	    } 
+	    else {
+	        warn("dynalloc() called with undefined value.\n");
+	        XSRETURN_UNDEF;
+	    }
 	CODE:
-	    /* catalogs and VTOCS are tough :-} */
-	    croak("dynalloc() not yet implemented.\n");
+	    dyninit( &dip );
+	    myhash = (HV *)SvRV(dyn_t_hash_ref);
+	    rc = h2dyn_t( &dip, myhash, 0 );
 	    ST(0) = sv_newmortal();
-	    ST(0) = &PL_sv_undef;
+	    if ( rc ) {
+	        if (dynalloc(&dip) == 0) { 
+	            ST(0) = &PL_sv_yes;
+	        }
+	        else { 
+	            sprintf(ewarnstr, "dynalloc() failed with error code %hX, info code %hX", dip.__errcode, dip.__infocode);
+                    warn(ewarnstr);
+	            ST(0) = &PL_sv_undef;
+	        }
+	    }
+	    else {
+	        warn("dynalloc() unable to initialize struct __dyn_t");
+	        ST(0) = &PL_sv_undef;
+	    }
 
-char *
-dynfree(fp)
-	FILE * fp
+SV *
+dynfree(dyn_t_hash_ref)
+	SV * dyn_t_hash_ref
 	PROTOTYPE: $
+	INIT:
+	    HV * myhash;
+	    __dyn_t dip;
+	    int rc;
+	    char *ewarnstr;
+	    if ( dyn_t_hash_ref != &PL_sv_undef) {
+		/* valid hash ref? */
+		if ( SvROK(dyn_t_hash_ref) ) {
+		    if ( SvTYPE(SvRV(dyn_t_hash_ref)) != SVt_PVHV ) {
+		        /* it is not a hashref */
+		        warn("dynfree() requires a hash reference");
+	                XSRETURN_UNDEF;
+		    }
+		}
+		else {
+		    warn("dynfree() requires a hash reference");
+	            XSRETURN_UNDEF;
+		}
+	    } 
+	    else {
+	        warn("dynfree() called with undefined value.\n");
+	        XSRETURN_UNDEF;
+	    }
 	CODE:
-	    /* catalogs and VTOCS are tough :-} */
-	    croak("dynfree() not yet implemented.\n");
+	    dyninit( &dip );
+	    myhash = (HV *)SvRV(dyn_t_hash_ref);
+	    rc = h2dyn_t( &dip, myhash, 1 );
 	    ST(0) = sv_newmortal();
-	    ST(0) = &PL_sv_undef;
+	    if ( rc ) {
+	        if (dynfree(&dip) == 0) { 
+	            ST(0) = &PL_sv_yes;
+	        }
+	        else { 
+	            sprintf(ewarnstr, "dynfree() failed with error code %hX, info code %hX", dip.__errcode, dip.__infocode);
+                    warn(ewarnstr);
+	            ST(0) = &PL_sv_undef;
+	        }
+	    }
+	    else {
+	        warn("dynfree() unable to initialize struct __dyn_t");
+	        ST(0) = &PL_sv_undef;
+	    }
 
 void
 flush(fp)
@@ -758,19 +894,26 @@ mvswrite(fp,buffer,count)
 	    RETVAL
 
 char * 
-pds_mem(pds)
+pds_mem(pds,...)
 	char * pds
-	PROTOTYPE: $
+	PROTOTYPE: @
 	CODE:
-	    NODE_PTR my_mem_orig;
 	    NODE_PTR my_mem;
 	    NODE_PTR next_mem;
 	    char * member_name;
 	    char * blank;
-	    SV * tmp;
 	    int i = 0;
-	    my_mem = _pds_mem(pds);
-	    my_mem_orig = my_mem;
+	    int alias_flag;
+	    if (items > 2) croak("too many args");
+	    if (items == 2) {
+	        if (!SvIOK(ST(1))) croak("alias flag must be an integer");
+	        alias_flag = SvIV(ST(1));
+	    }
+	    if (alias_flag < 0) 
+	        alias_flag = 0;
+	    if (alias_flag > 2)
+	        alias_flag = 0;
+	    my_mem = _pds_mem(pds,&i,alias_flag);
 	    next_mem = my_mem;
 	    if (next_mem == (NODE_PTR)(-1)) {
 	        ST(0) = sv_newmortal();
@@ -782,33 +925,24 @@ pds_mem(pds)
 	        XSRETURN(1);  
 	    }
 	    else {
-                /* count the number of members we have seen */
-	        while (next_mem != NULL) {
-	            i++;
-	            next_mem = my_mem->next;
-	            my_mem = next_mem;
-	        }
                 /* extend perl return ST-ack by an appropriate amount */
-		EXTEND(sp,i+1);
-                /* reset pointers for second pass */
-	        next_mem = my_mem_orig;
-	        my_mem = my_mem_orig;
+                if (i >= 0)
+		    EXTEND(sp,i+2);
                 /*
                  * put linked list names onto ST array, sans blank characters.
-                 * Free the mallocs too.
+                 * free the mallocs too.
                  */
 	        while (next_mem != NULL) {
 		    member_name = my_mem->name;
 		    blank = strchr(member_name,' ');
                     if (blank != NULL)
 		        *blank = '\0';
-                    tmp = sv_2mortal(newSVpvn(member_name,strlen(member_name)));
-	            PUSHs(tmp);
+                    PUSHs(sv_2mortal(newSVpvn(member_name,strlen(member_name))));
 	            next_mem = my_mem->next;
 	            free(my_mem);
 	            my_mem = next_mem;
 	        }
-	        XSRETURN(i+1);
+	        XSRETURN(i+2);
 	    }
 
 void

@@ -6,3 +6,4 @@ Stdio.pm
 Stdio.xs
 test.pl
 pds_test
+stdio_cookbook.pod

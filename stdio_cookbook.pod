@@ -1,0 +1,157 @@
+=head1 NAME
+
+stdio_cookbook - recipes and examples for the use of OS390::Stdio
+
+=head1 DESCRIPTION
+
+=head1 mvsopen() modes
+
+The mode argument to mvsopen() corresponds to the mode argument to
+fopen() in the C programming language.  From the 
+B<C/C++ Run-Time Library Reference> document we find:
+
+=over 4
+
+=item "r"
+
+Open a text file for reading. (The file must exist.)
+
+=item "w"
+
+Open a text file for writing. If the "w" mode is specified
+for a ddname that has DISP=MOD, the behavior is the same
+as if "a" had been specified. Otherwise, if the file already
+exists, its contents are destroyed.
+
+=item "a"
+
+Open a text file in append mode for writing at the end of
+the file.  mvsopen() creates the file if it does not exist.
+
+=item "r+"
+
+Open a text file for both reading and writing. (The file
+must exist.)
+
+=item "w+"
+
+Open a text file for both reading and writing. If the "w+"
+mode is specified for a ddname that has DISP=MOD, the
+behavior is the same as if "a+" had been specified.
+Otherwise, if the file already exists, its contents are
+destroyed.
+
+=item "a+"
+
+Open a text file in append mode for reading or updating at
+the end of the file. mvsopen() creates the file if it does
+not exist.
+
+=item "rb"
+
+Open a binary file for reading. (The file must exist.)
+
+=item "wb"
+
+Open an empty binary file for writing. If the "wb" mode is
+specified for a ddname that has DISP=MOD, the behavior is
+the same as if "ab" had been specified. Otherwise, if the
+file already exists, its contents are destroyed.
+
+=item "ab"
+
+Open a binary file in append mode for writing at the end
+of the file.  mvsopen() creates the file if it does not
+exist.
+
+=item "rt"
+
+Open a text file for reading. (The file must exist.)
+
+=item "wt"
+
+Open a text file for writing. If the file already exists,
+its contents are destroyed.
+
+=item "at"
+
+Open a text file in append mode for writing at the end of
+the file.  mvsopen() creates the file if it does not exist.
+
+=item "r+b" or "rb+"
+
+Open a binary file for both reading and writing. (The file
+must exist.)
+
+=item "w+b" or "wb+"
+
+Open an empty binary file for both reading and writing. If
+the "w+b" (or "wb+") mode is specified for a ddname that has
+DISP=MOD, the behavior is the same as if "ab+" had been
+specified.  Otherwise, if the file already exists, its
+contents are destroyed.
+
+=item "a+b" or "ab+"
+
+Open a binary file in append mode for writing at the end
+of the file.  mvsopen() creates the file if it does not
+exist.
+
+=item "r+t" or "rt+"
+
+Open a text file for both reading and writing. (The file
+must exist.)
+
+=item "w+t" or "wt+"
+
+Open a text file for both reading and writing. If the file
+already exists, its contents are destroyed.
+
+=item "a+t" or "at+"
+
+Open a text file in append mode for writing at the end of
+the file.  mvsopen() creates the file if it does not exist.
+
+=back
+
+=head1 dynalloc() and dynfree() example
+
+Here is an example of the use of dynalloc() and dynfree() with JCL
+DD card equivalent statements in comments on the right hand side:
+
+    use OS390::Stdio qw(&dynalloc &dynfree);
+    my %dyn_hash = (
+        "ddname" => "MYDD",              # //MYDD DD
+        "dsname" => "PVHP.MYDSN",        # //     DSN=PVHP.MYDSN,
+        "status" => 4,                   # //     DISP=(NEW,   
+        "normdisp" => 2,                 # //               CATLG),
+        "alcunit" => '\001',             # //     SPACE=(CYL,
+        "primary" => 2,                  # //             (2,
+        "secondary" => 1,                # //               1),
+        "misc_flags" => (2 | 8),         # //                RLSE,CONTIG),
+        "dsorg" => 0x4000,               # //     DSORG=PS,
+        "recfm" => 0x80 + 0x04 + 0x02,   # //     RECFM=FAM,
+        "lrecl" => 121,                  # //     LRECL=121,
+        "blksize" => 12100               # //     BLKSIZE=12100
+    );
+    if (dynalloc(\%dyn_hash)) {
+
+        # use //'PVHP.MYDSN' data set
+
+    }
+    else {
+        die "unable to dynalloc $dyn_hash{dsname}";
+    }
+    if (!dynfree(\%dyn_hash)) {
+        warn "unable to dynfree $dyn_hash{dsname)}"
+    }
+
+=head1 REFERENCES
+
+The discussion of mvsopen() modes was adapted from:
+
+ EDCLB010: OS/390 V2R8.0 C/C++ Run-Time Library Reference
+ Table 21.  Values for the Positional Parameter
+
+=cut
+

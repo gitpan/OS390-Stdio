@@ -1,5 +1,21 @@
 ##################################################################
 
+Special notes for release 0.005:
+--------------------------------
+The dynalloc() routine is now functional.
+The dynfree() routine is now functional.
+
+The pds_mem() routine and the internal _pds_mem() function should
+now be a bit more efficient than the previous release.  pds_mem()
+can now list aliases or aliases and non alias members
+depending on the value of an extra optional argument.
+
+* A pds_mem() test has been folded into test.pl, along with a
+  dynalloc() and a dynfree() test.  All 76 test ought to pass for
+  you.
+
+##################################################################
+
 Special notes for release 0.004:
 --------------------------------
 The pds_mem() routine now does a better job of EXTENDing the 
